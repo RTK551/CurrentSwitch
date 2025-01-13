@@ -1,93 +1,71 @@
-
-
 /*
+  CurrentSwitch est une bibliothèque pour utiliser une sonde de courant non invasive comme preuve de fonctionnement.
+  Ce code utilise un capteur SCT-013-000, avec l'interface Arduino et la bibliothèque emonLib originale :
+  https://github.com/openenergymonitor/EmonLib
 
-CurrentSwitch Is a library to use non invasive current probe to use it a a 'working proof'. 
-This skecht use a SCT-013-000. Interface with arduino here and original emonLib library:
- ***************  https://github.com/openenergymonitor/EmonLib  *************
-
-Instead of emonLib that read real current, this on only return 'true' if there is 'some current'. 
-This is usefull usefull as workproof and very weightless compare to emonLib.
+  Au lieu de lire le courant réel avec emonLib, ce code renvoie 'true' si un courant est détecté.
+  Cela est utile comme preuve de fonctionnement et est beaucoup plus léger que la bibliothèque emonLib.
 
   Copyright (c) 31/07/2015
+  Par Nitrof
 
-    By Nitrof
+  Ce logiciel est distribué sous la licence MIT. Voir les détails de la licence ci-dessous.
+*/
 
-  Permission is hereby granted, free of charge, to any person obtaining a copy of
-  this software and associated documentation files (the "Software"), to deal in
-  the Software without restriction, including without limitation the rights to
-  use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-  the Software, and to permit persons to whom the Software is furnished to do so,
-  subject to the following conditions:
+#include <TimerOne.h>          // Bibliothèque pour utiliser Timer1 (période d'échantillonnage)
+#include <currentSwitch.h>     // Bibliothèque pour la gestion du capteur de courant
 
-  The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
+// Définition des broches et paramètres
+#define INPUT1 0              // Broche d'entrée analogique pour le capteur de courant
+#define CURRENT_SCALE 100     // Échelle du capteur de courant
+#define CURRENT_THRESHOLD 10  // Seuil du courant pour la détection
 
-  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-  FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-  COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-  IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-  */
+#define SECTOR_FREQUENCY 60   // Fréquence secteur (60 Hz dans la plupart des pays)
 
 
-#include <TimerOne.h>
-#include <currentSwitch.h>
-
-
-
-#define INPUT1 0 //var for analog input
-#define CURRENT_SCALE 100
-#define CURRENT_TRESHOLD 10
-
-
-#define SECTOR_FREQUENCY 60 // or 50Hz in some country
-
-//use ANALOG_RESO_12 if you use 12 bit ADC
-CurrentSwitch test1(ANALOG_RESO_10, CURRENT_SCALE, CURRENT_TRESHOLD); //start an instance (analog intput pin, sensor current range, current level trigger)
+// Création de l'instance de CurrentSwitch pour surveiller le courant
+CurrentSwitch test1(ANALOG_RESO_10, CURRENT_SCALE, CURRENT_THRESHOLD);  // Initialisation avec résolution 10 bits et seuil de courant
 
 void setup() {
-  Serial.begin(9600);
-  //analogReadResolution(12); // for 12bit analog resolution
-  
+  Serial.begin(9600);  // Initialisation de la communication série
 
-    //Monitoring of sensor is done trough an interrupt timer
-  Timer1.initialize(test1.currentSamplingPeriod(SECTOR_FREQUENCY));
-  Timer1.attachInterrupt(readCurrentISR); // handle monitoring of all CurrentSwitch instance
+  // Initialisation de la minuterie pour la gestion de l'échantillonnage du courant
+  Timer1.initialize(test1.currentSamplingPeriod(SECTOR_FREQUENCY));  // Période d'échantillonnage basée sur la fréquence secteur
+  Timer1.attachInterrupt(readCurrentISR);  // Attache l'interruption pour lire les données de courant
 }
 
 void loop() {
-  //use the workProff function to trigger something
-  if (test1.workProof()) { //if working
-    Serial.println("input working");
-  }
-  else if (!test1.workProof()) { //if not working
-    Serial.println("input not working");
+  // Vérification de l'état du capteur et impression du résultat sur le moniteur série
+  if (test1.workProof()) {  // Vérifie si le capteur détecte un courant
+    Serial.println("Entrée fonctionnelle");
+  } else {
+    Serial.println("Entrée non fonctionnelle");
   }
 
+  // Vérifie si le courant a été détecté (augmentation de la consommation)
   if (test1.rised()) {
-    Serial.println("The load started!");
+    Serial.println("La charge a démarré !");
   }
 
-  if (test1.droped()) {
-    Serial.println("The load stoped!")
-  } 
+  // Vérifie si le courant a cessé (diminution de la consommation)
+  if (test1.dropped()) {
+    Serial.println("La charge s'est arrêtée !");
+  }
 
+  // Vérification de l'état du changement de courant (montée ou descente)
   if (test1.changed() == RISE) {
-    Serial.println("The load started!");
-  }
-  else if (test1.changed() == DROP) {
-    Serial.println("The load stoped!");
+    Serial.println("La charge a démarré !");
+  } else if (test1.changed() == DROP) {
+    Serial.println("La charge s'est arrêtée !");
   }
 
+  // Délai de 1 seconde pour éviter un envoi trop rapide de données sur le moniteur série
   delay(1000);
 }
 
-void readCurrentISR()
-{
-  //read all currentSwitch into the ISR
-  test1.read(analogRead(INPUT1));
-  //other CurrentSwitch.read( [INPUT] );
+// Fonction d'interruption pour lire les données de courant
+void readCurrentISR() {
+  // Lit la valeur du capteur à chaque interruption
+  test1.read(analogRead(INPUT1));  // Lecture de la valeur analogique du capteur de courant
+  // D'autres instances de CurrentSwitch peuvent être ajoutées pour lire plusieurs capteurs si nécessaire
 }
